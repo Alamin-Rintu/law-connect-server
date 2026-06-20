@@ -1,7 +1,7 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 dotenv.config();
 
@@ -35,6 +35,24 @@ async function run() {
     app.get("/lawyer", async (req, res) => {
       const cursor = lawyerCollection.find();
       const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.delete("/lawyer/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await lawyerCollection.deleteOne(query);
+      res.send(result);
+    });
+    
+    app.patch("/lawyer/:id", async (req, res) => {
+      const id = req.params.id;
+      const updateLawyer = req.body;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: updateLawyer,
+      };
+      const result = await lawyerCollection.updateOne(query, update);
       res.send(result);
     });
 
