@@ -25,6 +25,7 @@ async function run() {
     await client.connect();
     const db = client.db("law_connect");
     const lawyerCollection = db.collection("allLawyer");
+    const clientCollection = db.collection("allClient");
 
     app.post("/lawyer", async (req, res) => {
       const newLawyer = req.body;
@@ -44,7 +45,7 @@ async function run() {
       const result = await lawyerCollection.deleteOne(query);
       res.send(result);
     });
-    
+
     app.patch("/lawyer/:id", async (req, res) => {
       const id = req.params.id;
       const updateLawyer = req.body;
@@ -55,6 +56,41 @@ async function run() {
       const result = await lawyerCollection.updateOne(query, update);
       res.send(result);
     });
+
+    app.get("/lawyer/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await lawyerCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.post("/client", async (req, res) => {
+      const client = req.body;
+      const result = await clientCollection.insertOne(client);
+      res.send(result);
+    });
+
+    // app.get("/client", async (req, res) => {
+    //   const cursor = clientCollection.find();
+    //   const result = await cursor.toArray();
+    //   res.send(result);
+    // });
+
+  app.get("/client", async (req, res) => {
+  const { lawyerId, userEmail } = req.query;
+
+  let query = {};
+
+  if (lawyerId) query.lawyerId = lawyerId;
+  if (userEmail) query.userEmail = userEmail;
+
+  const result = await clientCollection
+    .find(query)
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  res.send(result);
+});
 
     await client.db("admin").command({ ping: 1 });
     console.log(
