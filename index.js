@@ -76,21 +76,39 @@ async function run() {
     //   res.send(result);
     // });
 
-  app.get("/client", async (req, res) => {
-  const { lawyerId, userEmail } = req.query;
+    app.get("/client", async (req, res) => {
+      const { lawyerId, userEmail } = req.query;
 
-  let query = {};
+      let query = {};
 
-  if (lawyerId) query.lawyerId = lawyerId;
-  if (userEmail) query.userEmail = userEmail;
+      if (lawyerId) query.lawyerId = lawyerId;
+      if (userEmail) query.userEmail = userEmail;
 
-  const result = await clientCollection
-    .find(query)
-    .sort({ createdAt: -1 })
-    .toArray();
+      const result = await clientCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .toArray();
 
-  res.send(result);
-});
+      res.send(result);
+    });
+
+    app.delete("/client/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await clientCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.patch("/client/:id", async (req, res) => {
+      const id = req.params.id;
+      const updateComment = req.body;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: updateComment,
+      };
+      const result = await clientCollection.updateOne(query, update);
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
