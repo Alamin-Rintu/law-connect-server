@@ -21,7 +21,9 @@ const client = new MongoClient(uri, {
   },
 });
 
-const JWKS = createRemoteJWKSet(new URL("http://localhost:3000/api/auth/jwks"));
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`),
+);
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -43,7 +45,7 @@ const verifyToken = async (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db("law_connect");
     const lawyerCollection = db.collection("allLawyer");
     const clientCollection = db.collection("allClient");
@@ -442,8 +444,46 @@ async function run() {
         });
       }
     });
+    app.get("/admin/analytics", async (req, res) => {
+      try {
+        // Run counts in parallel to speed up response time
+        const [totalClients, totalLawyers, totalHireRequests, totalPayments] =
+          await Promise.all([
+            clientCollection.countDocuments(),
+            lawyerCollection.countDocuments(),
+            hireLawyerCollection.countDocuments(),
+            payCollection.countDocuments(),
+          ]);
 
-    await client.db("admin").command({ ping: 1 });
+        // Aggregate revenue directly in the database
+        const revenueResult = await payCollection
+          .aggregate([
+            {
+              $group: {
+                _id: null,
+                total: { $sum: { $toDouble: "$amount" } }, // Converts string to number if needed
+              },
+            },
+          ])
+          .toArray();
+
+        const totalRevenue = revenueResult[0]?.total || 0;
+
+        res.send({
+          totalClients,
+          totalLawyers,
+          totalHireRequests,
+          totalPayments,
+          totalRevenue,
+        });
+      } catch (error) {
+        res.status(500).send({
+          message: error.message,
+        });
+      }
+    });
+
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
