@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 
 dotenv.config();
 
@@ -19,6 +20,26 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const JWKS = createRemoteJWKSet(new URL("http://localhost:3000/api/auth/jwks"));
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    console.log("payload", payload);
+    next();
+  } catch (error) {
+    return res.status(404).json({ message: "forbidden" });
+  }
+};
 
 async function run() {
   try {
@@ -105,45 +126,6 @@ async function run() {
       }
     });
 
-    // app.get("/lawyer", async (req, res) => {
-    //   try {
-    //     const search = req.query.search;
-    //     const specialization = req.query.specialization;
-    //     const sort = req.query.sort;
-
-    //     const query = {};
-
-    //     if (search) {
-    //       query.name = {
-    //         $regex: search,
-    //         $options: "i",
-    //       };
-    //     }
-
-    //     if (specialization && specialization !== "all") {
-    //       query.specialization = specialization;
-    //     }
-
-    //     let sortOptions = {};
-    //     if (sort === "lowToHigh") {
-    //       sortOptions.fee = 1;
-    //     } else if (sort === "highToLow") {
-    //       sortOptions.fee = -1;
-    //     }
-
-    //     const cursor = lawyerCollection
-    //       .find(query)
-    //       .sort(sortOptions)
-    //       .collation({ locale: "en", numericOrdering: true });
-
-    //     const result = await cursor.toArray();
-    //     res.send(result);
-    //   } catch (error) {
-    //     console.error("Error fetching lawyers:", error);
-    //     res.status(500).send({ message: "Internal Server Error" });
-    //   }
-    // });
-
     app.delete("/lawyer/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -162,7 +144,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/lawyer/:id", async (req, res) => {
+    app.get("/lawyer/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await lawyerCollection.findOne(query);
@@ -230,17 +212,6 @@ async function run() {
       res.send(result);
     });
 
-    // app.patch("/user/:id", async (req, res) => {
-    //   const id = req.params.id;
-    //   const updateRole = req.body;
-    //   const query = { _id: new ObjectId(id) };
-    //   const update = {
-    //     $set: updateRole,
-    //   };
-    //   const result = await userCollection.updateOne(query, update);
-    //   res.send(result);
-    // });
-
     app.patch("/user/:id", async (req, res) => {
       const id = req.params.id;
       const { role } = req.body;
@@ -268,28 +239,14 @@ async function run() {
       res.send(result);
     });
 
-    // app.get("/hireLawyer", async (req, res) => {
-    //   try {
-    //     const result = await hireLawyerCollection.find().toArray();
-    //     res.send(result);
-    //   } catch (error) {
-    //     res.status(500).send({ message: "Server error", error });
-    //   }
-    // });
-
     app.get("/hireLawyer", async (req, res) => {
       try {
         const { lawyerEmail } = req.query;
-
         const query = {};
-
-        // শুধু সেই lawyer-এর request
         if (lawyerEmail) {
           query.lawyerEmail = lawyerEmail;
         }
-
         const result = await hireLawyerCollection.find(query).toArray();
-
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Server error", error });
@@ -319,41 +276,6 @@ async function run() {
         });
       }
     });
-
-    // app.get("/hireLawyer/client", async (req, res) => {
-    //   try {
-    //     const { email } = req.query;
-
-    //     if (!email) {
-    //       return res.status(400).send({ message: "Email is required" });
-    //     }
-
-    //     const result = await hireLawyerCollection
-    //       .find({ clientEmail: email })
-    //       .toArray();
-
-    //     res.send(result);
-    //   } catch (error) {
-    //     res.status(500).send({ message: "Server error", error });
-    //   }
-    // });
-    // app.get("/hireLawyer/lawyer", async (req, res) => {
-    //   try {
-    //     const { lawyerId } = req.query;
-
-    //     console.log("QUERY lawyerId:", req.query.lawyerId);
-
-    //     if (!lawyerId) {
-    //       return res.status(400).send({ message: "lawyerId is required" });
-    //     }
-
-    //     const result = await hireLawyerCollection.find({ lawyerId }).toArray();
-
-    //     res.send(result);
-    //   } catch (error) {
-    //     res.status(500).send({ message: "Server error", error });
-    //   }
-    // });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
