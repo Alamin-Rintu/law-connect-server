@@ -34,7 +34,7 @@ const verifyToken = async (req, res, next) => {
   }
   try {
     const { payload } = await jwtVerify(token, JWKS);
-    console.log("payload", payload);
+    // console.log("payload", payload);
     next();
   } catch (error) {
     return res.status(404).json({ message: "forbidden" });
@@ -49,10 +49,15 @@ async function run() {
     const clientCollection = db.collection("allClient");
     const userCollection = db.collection("user");
     const hireLawyerCollection = db.collection("hireRequests");
+    const payCollection = db.collection("pay");
 
     // lawyer api here
     app.post("/lawyer", async (req, res) => {
-      const newLawyer = req.body;
+      const newLawyer = {
+        ...req.body,
+        createdAt: new Date(),
+      };
+
       const result = await lawyerCollection.insertOne(newLawyer);
       res.send(result);
     });
@@ -109,7 +114,21 @@ async function run() {
           },
         });
       } catch (error) {
-        console.error("Error fetching lawyers:", error);
+        // console.error("Error fetching lawyers:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    app.get("/lawyer/latest", async (req, res) => {
+      try {
+        const result = await lawyerCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(6)
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
@@ -273,6 +292,153 @@ async function run() {
         res.status(500).send({
           message: "Server error",
           error: error.message,
+        });
+      }
+    });
+
+    app.patch("/hireLawyer/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const updateData = {
+        status,
+      };
+
+      if (status.toLowerCase() === "accepted") {
+        updateData.pay = "paynow";
+      }
+
+      if (status.toLowerCase() === "rejected") {
+        updateData.pay = "unavailable";
+      }
+
+      const result = await hireLawyerCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: updateData,
+        },
+      );
+
+      res.send(result);
+    });
+
+    app.patch("/hireLawyer/payment/:id", async (req, res) => {
+      const { id } = req.params;
+
+      const result = await hireLawyerCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            pay: "paid",
+            paymentStatus: "completed",
+            paidAt: new Date(),
+          },
+        },
+      );
+
+      res.send(result);
+    });
+    app.post("/payment", async (req, res) => {
+      try {
+        // console.log("Payment Body:", req.body);
+
+        const {
+          hireId,
+          lawyerName,
+          clientName,
+          clientEmail,
+          lawyerEmail,
+          amount,
+          stripeSessionId,
+          paymentIntent,
+        } = req.body;
+
+        if (!hireId) {
+          return res.status(400).send({
+            success: false,
+            message: "hireId is required",
+          });
+        }
+
+        if (!stripeSessionId) {
+          return res.status(400).send({
+            success: false,
+            message: "stripeSessionId is required",
+          });
+        }
+
+        // Prevent duplicate payment records
+        const existingPayment = await payCollection.findOne({
+          stripeSessionId,
+        });
+
+        if (existingPayment) {
+          return res.send({
+            success: true,
+            message: "Payment already recorded",
+          });
+        }
+
+        // Update hire request
+        const updateResult = await hireLawyerCollection.updateOne(
+          {
+            _id: new ObjectId(hireId),
+          },
+          {
+            $set: {
+              pay: "paid",
+              paymentStatus: "completed",
+              stripeSessionId,
+              paymentIntent,
+              paidAt: new Date(),
+            },
+          },
+        );
+
+        console.log("Update Result:", updateResult);
+
+        // Save payment history
+        const paymentResult = await payCollection.insertOne({
+          hireId,
+          lawyerName,
+          clientName,
+          clientEmail,
+          lawyerEmail,
+          amount,
+          stripeSessionId,
+          paymentIntent,
+          paymentStatus: "completed",
+          paidAt: new Date(),
+          createdAt: new Date(),
+        });
+
+        res.send({
+          success: true,
+          updateResult,
+          paymentResult,
+        });
+      } catch (error) {
+        console.error("Payment Save Error:", error);
+
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
+    });
+
+    app.get("/payments", async (req, res) => {
+      try {
+        const result = await payCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
         });
       }
     });
